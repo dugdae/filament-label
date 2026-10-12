@@ -52,6 +52,13 @@
     max-height: 140px; overflow: auto; margin-top: 10px; }
   .recent { display: flex; gap: 8px; flex-wrap: wrap; }
   .recent button { padding: 8px 12px; font-size: 14px; font-weight: 500; }
+  .tabs { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 6px; margin-bottom: 16px; }
+  .tabs button { flex: 1; border: none; background: transparent; color: var(--muted); padding: 10px; }
+  .tabs button.active { background: var(--accent); color: var(--accent-text); }
+  .code { display: flex; align-items: center; gap: 4px; }
+  .code span { font-weight: 700; font-size: 18px; }
+  .code input { flex: 1; width: 0; min-width: 0; text-align: center; padding: 11px 4px; font-weight: 600; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -74,8 +81,51 @@
     </div>
   </section>
 
+  <div class="tabs" role="tablist">
+    <button data-tab="filament" role="tab">Filament</button>
+    <button data-tab="model" role="tab">Model (Serie Z)</button>
+  </div>
+
+  <!-- 2b. Model label data -->
+  <section class="card" id="tab-model">
+    <h2>2 · Model (Serie Z)</h2>
+    <div class="grid">
+      <div class="full">
+        <label>Code (Zxx.Rxx.Pxxx.x)</label>
+        <div class="code">
+          <span>Z</span><input id="mZ" inputmode="numeric" maxlength="2" placeholder="xx" autocomplete="off">
+          <span>.R</span><input id="mR" inputmode="numeric" maxlength="2" placeholder="xx" autocomplete="off">
+          <span>.P</span><input id="mP" inputmode="numeric" maxlength="3" placeholder="xxx" autocomplete="off" style="flex:1.4">
+          <span>.</span><input id="mV" inputmode="numeric" maxlength="1" placeholder="x" autocomplete="off" style="flex:.7">
+        </div>
+      </div>
+      <div class="full">
+        <label for="mName">Model name (optional)</label>
+        <input id="mName" placeholder="e.g. Gundam stand" autocomplete="off">
+      </div>
+      <div>
+        <label for="mDate">Date</label>
+        <input id="mDate" type="date">
+      </div>
+      <div>
+        <label for="mDateFmt">Date format</label>
+        <select id="mDateFmt">
+          <option value="dmy">12/10/2026</option>
+          <option value="dMy">12 Oct 2026</option>
+          <option value="iso">2026-10-12</option>
+          <option value="mdy">10/12/2026</option>
+        </select>
+      </div>
+    </div>
+    <p class="hint">The Note box on the label is left empty for writing by hand.</p>
+    <div id="mRecentWrap" class="hidden" style="margin-top:14px">
+      <label>Recent</label>
+      <div id="mRecent" class="recent"></div>
+    </div>
+  </section>
+
   <!-- 2. Label data -->
-  <section class="card">
+  <section class="card" id="tab-filament">
     <h2>2 · Filament</h2>
     <div class="grid">
       <div class="full">
@@ -160,7 +210,8 @@
   const NB = window.niimbluelib;
   const $ = (id) => document.getElementById(id);
   const cv = $("cv");
-  const FIELDS = ["fTitle", "fColor", "fCost", "fCurrency", "fDateFmt", "fEmptyBox", "fQty", "fDensity", "fW", "fH", "fDpi", "fDir"];
+  const FIELDS = ["fTitle", "fColor", "fCost", "fCurrency", "fDateFmt", "fEmptyBox", "fQty", "fDensity", "fW", "fH", "fDpi", "fDir",
+    "mZ", "mR", "mP", "mV", "mName", "mDateFmt"];
   const STORE_KEY = "filamentLabel.v1";
   let client = null;
   let busy = false;
@@ -175,7 +226,8 @@
       if (s[id] === undefined) continue;
       if ($(id).type === "checkbox") $(id).checked = s[id]; else $(id).value = s[id];
     }
-    $("fDate").value = new Date().toISOString().slice(0, 10);
+    $("fDate").value = $("mDate").value = today();
+    setTab(s.tab || "filament");
     renderRecent();
   };
   const persist = () => {
@@ -187,7 +239,28 @@
   // ---------- log ----------
   const log = (msg) => { console.log(msg); $("log").textContent += msg + "\n"; $("log").scrollTop = 1e9; };
 
+  // ---------- tabs ----------
+  let tab = "filament";
+  const setTab = (name) => {
+    tab = name === "model" ? "model" : "filament";
+    document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    $("tab-filament").classList.toggle("hidden", tab !== "filament");
+    $("tab-model").classList.toggle("hidden", tab !== "model");
+  };
+
   // ---------- label rendering ----------
+  const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  // Zxx.Rxx.Pxxx.x — numbers are zero-padded, anything else kept as typed.
+  const pad = (val, len, ph) => {
+    val = val.trim();
+    if (!val) return ph;
+    return /^\d+$/.test(val) ? val.padStart(len, "0") : val.toUpperCase();
+  };
+  const modelCode = () =>
+    `Z${pad($("mZ").value, 2, "xx")}.R${pad($("mR").value, 2, "xx")}.P${pad($("mP").value, 3, "xxx")}.${pad($("mV").value, 1, "x")}`;
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const fmtDate = (iso, fmt) => {
     if (!iso) return "";
@@ -249,6 +322,55 @@
     ctx.fillStyle = "#000"; ctx.strokeStyle = "#000";
     ctx.textBaseline = "middle";
 
+    if (tab === "model") drawModel(ctx, W, H, u, v); else drawFilament(ctx, W, H, u, v);
+
+    // Hard threshold: the printer prints every non-white pixel black, so remove anti-alias grey.
+    const img = ctx.getImageData(0, 0, W, H), p = img.data;
+    for (let i = 0; i < p.length; i += 4) {
+      const lum = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+      const c = lum < 150 ? 0 : 255;
+      p[i] = p[i + 1] = p[i + 2] = c; p[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+
+    $("sizeHint").textContent = `${$("fW").value} × ${$("fH").value} mm · ${W} × ${H} px @ ${dpi} dpi`;
+  };
+
+  // Code on top, optional model name, date, then an empty Note box for handwriting.
+  const drawModel = (ctx, W, H, u, v) => {
+    const font = (w, s) => `${w} ${s}px system-ui, Roboto, "Segoe UI", Arial, sans-serif`;
+    const name = $("mName").value.trim();
+    ctx.textAlign = "center";
+    fitFont(ctx, modelCode(), 800, 128 * u, W - 70 * u);
+    ctx.fillText(modelCode(), W / 2, 92 * v);
+
+    let y = 200 * v;
+    if (name) {
+      fitFont(ctx, name, 600, 72 * u, W - 90 * u);
+      ctx.fillText(name, W / 2, y);
+      y += 100 * v;
+    }
+
+    const lx = 64 * u;
+    const date = fmtDate($("mDate").value, $("mDateFmt").value);
+    const size = Math.min(fitFont(ctx, "Date - " + date, 700, 66 * u, W - lx - 40 * u), 66 * u);
+    ctx.textAlign = "left";
+    ctx.font = font(500, size);
+    ctx.fillText("Date - ", lx, y);
+    const lw = ctx.measureText("Date - ").width;
+    ctx.font = font(700, size);
+    ctx.fillText(date, lx + lw, y);
+
+    const bx = 48 * u, by = y + 56 * v, bw = W - 96 * u, bh = H - by - 36 * v;
+    ctx.lineWidth = Math.max(2, Math.round(7 * u));
+    ctx.strokeRect(bx, by, bw, bh);
+    ctx.font = font(600, 46 * u);
+    ctx.textBaseline = "top";
+    ctx.fillText("Note", bx + 18 * u, by + 14 * v);
+    ctx.textBaseline = "middle";
+  };
+
+  const drawFilament = (ctx, W, H, u, v) => {
     // Title
     const title = $("fTitle").value.trim();
     ctx.textAlign = "center";
@@ -277,17 +399,6 @@
       ctx.font = `700 ${size}px system-ui, Roboto, "Segoe UI", Arial, sans-serif`;
       ctx.fillText(value, lx + lw, y);
     }
-
-    // Hard threshold: the printer prints every non-white pixel black, so remove anti-alias grey.
-    const img = ctx.getImageData(0, 0, W, H), p = img.data;
-    for (let i = 0; i < p.length; i += 4) {
-      const lum = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
-      const c = lum < 150 ? 0 : 255;
-      p[i] = p[i + 1] = p[i + 2] = c; p[i + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-
-    $("sizeHint").textContent = `${$("fW").value} × ${$("fH").value} mm · ${W} × ${H} px @ ${dpi} dpi`;
   };
 
   // ---------- recent entries ----------
@@ -306,12 +417,32 @@
       };
       $("recent").appendChild(b);
     }
+
+    const models = load().recentModels || [];
+    $("mRecentWrap").classList.toggle("hidden", !models.length);
+    $("mRecent").innerHTML = "";
+    for (const r of models) {
+      const b = document.createElement("button");
+      b.textContent = r.name ? `${r.code} · ${r.name}` : r.code;
+      b.onclick = () => {
+        $("mZ").value = r.z; $("mR").value = r.r; $("mP").value = r.p; $("mV").value = r.v;
+        $("mName").value = r.name;
+        render(); persist();
+      };
+      $("mRecent").appendChild(b);
+    }
   };
   const remember = () => {
     const s = load();
-    const entry = { title: $("fTitle").value, color: $("fColor").value, cost: $("fCost").value,
-      currency: $("fCurrency").value, date: $("fDate").value };
-    s.recent = [entry, ...(s.recent || []).filter((r) => r.color !== entry.color || r.title !== entry.title)].slice(0, 8);
+    if (tab === "model") {
+      const entry = { code: modelCode(), z: $("mZ").value, r: $("mR").value, p: $("mP").value, v: $("mV").value,
+        name: $("mName").value };
+      s.recentModels = [entry, ...(s.recentModels || []).filter((r) => r.code !== entry.code)].slice(0, 8);
+    } else {
+      const entry = { title: $("fTitle").value, color: $("fColor").value, cost: $("fCost").value,
+        currency: $("fCurrency").value, date: $("fDate").value };
+      s.recent = [entry, ...(s.recent || []).filter((r) => r.color !== entry.color || r.title !== entry.title)].slice(0, 8);
+    }
     save(s); renderRecent();
   };
 
@@ -410,6 +541,11 @@
   $("btnConnect").onclick = connect;
   $("btnDisconnect").onclick = () => client && client.disconnect();
   $("btnPrint").onclick = print;
+  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+    setTab(b.dataset.tab);
+    const s = load(); s.tab = tab; save(s);
+    render();
+  }));
   document.querySelectorAll("input, select").forEach((el) =>
     el.addEventListener("input", () => { render(); persist(); }));
 
