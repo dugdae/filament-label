@@ -95,8 +95,8 @@
         <div class="code">
           <span>Z</span><input id="mZ" inputmode="numeric" maxlength="2" placeholder="xx" autocomplete="off">
           <span>.R</span><input id="mR" inputmode="numeric" maxlength="2" placeholder="xx" autocomplete="off">
-          <span>.P</span><input id="mP" inputmode="numeric" maxlength="3" placeholder="xxx" autocomplete="off" style="flex:1.4">
-          <span>.</span><input id="mV" inputmode="numeric" maxlength="1" placeholder="x" autocomplete="off" style="flex:.7">
+          <span>.P</span><input id="mP" inputmode="numeric" maxlength="3" placeholder="xxx" value="100" autocomplete="off" style="flex:1.4">
+          <span>.</span><input id="mV" inputmode="numeric" maxlength="1" placeholder="x" value="1" autocomplete="off" style="flex:.7">
         </div>
       </div>
       <div>
@@ -220,6 +220,7 @@
     const s = load();
     for (const id of FIELDS) {
       if (s[id] === undefined) continue;
+      if ((id === "mP" || id === "mV") && s[id] === "") continue; // keep the P100.1 default
       if ($(id).type === "checkbox") $(id).checked = s[id]; else $(id).value = s[id];
     }
     $("fDate").value = $("mDate").value = today();
@@ -336,35 +337,37 @@
   const drawModel = (ctx, W, H, u, v) => {
     const font = (w, s) => `${w} ${s}px system-ui, Roboto, "Segoe UI", Arial, sans-serif`;
     const code = modelCode();
-    const maxW = W - 80 * u;
+    const mx = 100 * u; // side margin; the sticker needs generous white space on every edge
+    const maxW = W - mx * 2;
     // Keep the code tall: squeeze it horizontally (down to 80%) before shrinking the font.
-    let size = 175 * u;
+    let size = 135 * u;
     ctx.font = font(900, size);
     while (size > 40 * u && ctx.measureText(code).width * 0.8 > maxW) {
       size -= 1; ctx.font = font(900, size);
     }
     const sx = Math.min(1, maxW / ctx.measureText(code).width);
     ctx.save();
-    ctx.translate(W / 2, 118 * v);
+    ctx.translate(W / 2, 175 * v);
     ctx.scale(sx, 1);
     ctx.textAlign = "center";
     ctx.fillText(code, 0, 0);
     ctx.restore();
 
-    const y = 262 * v;
-    const lx = 64 * u;
+    // Date, right-aligned to the margin.
+    const rx = W - mx, y = 295 * v;
     const date = fmtDate($("mDate").value, $("mDateFmt").value);
-    const dateSize = Math.min(fitFont(ctx, "Date - " + date, 700, 66 * u, W - lx - 40 * u), 66 * u);
-    ctx.textAlign = "left";
-    ctx.font = font(500, dateSize);
-    ctx.fillText("Date - ", lx, y);
-    const lw = ctx.measureText("Date - ").width;
+    const dateSize = Math.min(fitFont(ctx, "Date - " + date, 700, 56 * u, maxW), 56 * u);
+    ctx.textAlign = "right";
     ctx.font = font(700, dateSize);
-    ctx.fillText(date, lx + lw, y);
+    ctx.fillText(date, rx, y);
+    const dw = ctx.measureText(date).width;
+    ctx.font = font(500, dateSize);
+    ctx.fillText("Date - ", rx - dw, y);
 
-    const bx = 48 * u, by = y + 56 * v, bw = W - 96 * u, bh = H - by - 36 * v;
-    ctx.lineWidth = Math.max(2, Math.round(7 * u));
-    ctx.strokeRect(bx, by, bw, bh);
+    // Handwriting box: under half the label height.
+    const by = 360 * v, bh = 340 * v;
+    ctx.lineWidth = Math.max(2, Math.round(6 * u));
+    ctx.strokeRect(mx, by, maxW, bh);
   };
 
   const drawFilament = (ctx, W, H, u, v) => {
