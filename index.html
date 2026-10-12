@@ -99,10 +99,6 @@
           <span>.</span><input id="mV" inputmode="numeric" maxlength="1" placeholder="x" autocomplete="off" style="flex:.7">
         </div>
       </div>
-      <div class="full">
-        <label for="mName">Model name (optional)</label>
-        <input id="mName" placeholder="e.g. Gundam stand" autocomplete="off">
-      </div>
       <div>
         <label for="mDate">Date</label>
         <input id="mDate" type="date">
@@ -117,7 +113,7 @@
         </select>
       </div>
     </div>
-    <p class="hint">The Note box on the label is left empty for writing by hand.</p>
+    <p class="hint">The box on the label is left empty for writing by hand.</p>
     <div id="mRecentWrap" class="hidden" style="margin-top:14px">
       <label>Recent</label>
       <div id="mRecent" class="recent"></div>
@@ -211,7 +207,7 @@
   const $ = (id) => document.getElementById(id);
   const cv = $("cv");
   const FIELDS = ["fTitle", "fColor", "fCost", "fCurrency", "fDateFmt", "fEmptyBox", "fQty", "fDensity", "fW", "fH", "fDpi", "fDir",
-    "mZ", "mR", "mP", "mV", "mName", "mDateFmt"];
+    "mZ", "mR", "mP", "mV", "mDateFmt"];
   const STORE_KEY = "filamentLabel.v1";
   let client = null;
   let busy = false;
@@ -336,38 +332,39 @@
     $("sizeHint").textContent = `${$("fW").value} × ${$("fH").value} mm · ${W} × ${H} px @ ${dpi} dpi`;
   };
 
-  // Code on top, optional model name, date, then an empty Note box for handwriting.
+  // Big centered code, date, then an empty box for handwriting.
   const drawModel = (ctx, W, H, u, v) => {
     const font = (w, s) => `${w} ${s}px system-ui, Roboto, "Segoe UI", Arial, sans-serif`;
-    const name = $("mName").value.trim();
-    ctx.textAlign = "center";
-    fitFont(ctx, modelCode(), 800, 128 * u, W - 70 * u);
-    ctx.fillText(modelCode(), W / 2, 92 * v);
-
-    let y = 200 * v;
-    if (name) {
-      fitFont(ctx, name, 600, 72 * u, W - 90 * u);
-      ctx.fillText(name, W / 2, y);
-      y += 100 * v;
+    const code = modelCode();
+    const maxW = W - 80 * u;
+    // Keep the code tall: squeeze it horizontally (down to 80%) before shrinking the font.
+    let size = 175 * u;
+    ctx.font = font(900, size);
+    while (size > 40 * u && ctx.measureText(code).width * 0.8 > maxW) {
+      size -= 1; ctx.font = font(900, size);
     }
+    const sx = Math.min(1, maxW / ctx.measureText(code).width);
+    ctx.save();
+    ctx.translate(W / 2, 118 * v);
+    ctx.scale(sx, 1);
+    ctx.textAlign = "center";
+    ctx.fillText(code, 0, 0);
+    ctx.restore();
 
+    const y = 262 * v;
     const lx = 64 * u;
     const date = fmtDate($("mDate").value, $("mDateFmt").value);
-    const size = Math.min(fitFont(ctx, "Date - " + date, 700, 66 * u, W - lx - 40 * u), 66 * u);
+    const dateSize = Math.min(fitFont(ctx, "Date - " + date, 700, 66 * u, W - lx - 40 * u), 66 * u);
     ctx.textAlign = "left";
-    ctx.font = font(500, size);
+    ctx.font = font(500, dateSize);
     ctx.fillText("Date - ", lx, y);
     const lw = ctx.measureText("Date - ").width;
-    ctx.font = font(700, size);
+    ctx.font = font(700, dateSize);
     ctx.fillText(date, lx + lw, y);
 
     const bx = 48 * u, by = y + 56 * v, bw = W - 96 * u, bh = H - by - 36 * v;
     ctx.lineWidth = Math.max(2, Math.round(7 * u));
     ctx.strokeRect(bx, by, bw, bh);
-    ctx.font = font(600, 46 * u);
-    ctx.textBaseline = "top";
-    ctx.fillText("Note", bx + 18 * u, by + 14 * v);
-    ctx.textBaseline = "middle";
   };
 
   const drawFilament = (ctx, W, H, u, v) => {
@@ -423,10 +420,9 @@
     $("mRecent").innerHTML = "";
     for (const r of models) {
       const b = document.createElement("button");
-      b.textContent = r.name ? `${r.code} · ${r.name}` : r.code;
+      b.textContent = r.code;
       b.onclick = () => {
         $("mZ").value = r.z; $("mR").value = r.r; $("mP").value = r.p; $("mV").value = r.v;
-        $("mName").value = r.name;
         render(); persist();
       };
       $("mRecent").appendChild(b);
@@ -435,8 +431,7 @@
   const remember = () => {
     const s = load();
     if (tab === "model") {
-      const entry = { code: modelCode(), z: $("mZ").value, r: $("mR").value, p: $("mP").value, v: $("mV").value,
-        name: $("mName").value };
+      const entry = { code: modelCode(), z: $("mZ").value, r: $("mR").value, p: $("mP").value, v: $("mV").value };
       s.recentModels = [entry, ...(s.recentModels || []).filter((r) => r.code !== entry.code)].slice(0, 8);
     } else {
       const entry = { title: $("fTitle").value, color: $("fColor").value, cost: $("fCost").value,
