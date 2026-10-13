@@ -113,7 +113,7 @@
         </select>
       </div>
     </div>
-    <p class="hint">The box on the label is left empty for writing by hand.</p>
+    <p class="hint">The box on the label is left empty for writing by hand. Z01–Z12 print the stupa name (Thai) on the first line: <b id="mName">—</b></p>
     <div id="mRecentWrap" class="hidden" style="margin-top:14px">
       <label>Recent</label>
       <div id="mRecent" class="recent"></div>
@@ -258,6 +258,16 @@
   };
   const modelCode = () =>
     `Z${pad($("mZ").value, 2, "xx")}.R${pad($("mR").value, 2, "xx")}.P${pad($("mP").value, 3, "xxx")}.${pad($("mV").value, 1, "x")}`;
+  // Thai stupa name per Z number (printed as the first line of the Model label).
+  const STUPA = {
+    1: "พระธาตุศรีจอมทอง", 2: "พระธาตุลำปางหลวง", 3: "พระธาตุช่อแฮ", 4: "พระธาตุแช่แห้ง",
+    5: "เจดีย์วัดพระสิงห์", 6: "เจดีย์เจ็ดยอด", 7: "พระบรมธาตุบ้านตาก", 8: "พระธาตุดอยสุเทพ",
+    9: "พระธาตุพนม", 10: "พระธาตุหริภุญชัย", 11: "เจดีย์วัดเกตการาม", 12: "พระธาตุดอยตุง",
+  };
+  const stupaName = () => {
+    const z = $("mZ").value.trim();
+    return /^\d+$/.test(z) ? (STUPA[+z] || "") : "";
+  };
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const fmtDate = (iso, fmt) => {
     if (!iso) return "";
@@ -330,6 +340,7 @@
     }
     ctx.putImageData(img, 0, 0);
 
+    $("mName").textContent = stupaName() || "—";
     $("sizeHint").textContent = `${$("fW").value} × ${$("fH").value} mm · ${W} × ${H} px @ ${dpi} dpi`;
   };
 
@@ -337,8 +348,18 @@
   const drawModel = (ctx, W, H, u, v) => {
     const font = (w, s) => `${w} ${s}px system-ui, Roboto, "Segoe UI", Arial, sans-serif`;
     const code = modelCode();
+    const THAI = `"Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, Roboto, sans-serif`;
     const mx = 100 * u; // side margin; the sticker needs generous white space on every edge
     const maxW = W - mx * 2;
+    // First line: Thai stupa name, small, always on one line (shrinks to fit).
+    const name = stupaName();
+    if (name) {
+      let ns = 52 * u;
+      do { ctx.font = `700 ${ns}px ${THAI}`; ns -= 1; } while (ns > 20 * u && ctx.measureText(name).width > maxW);
+      ctx.textAlign = "right"; // flush with the right margin, same as the date
+      ctx.fillText(name, W - mx, 95 * v);
+    }
+
     // Keep the code tall: squeeze it horizontally (down to 80%) before shrinking the font.
     let size = 135 * u;
     ctx.font = font(900, size);
@@ -347,14 +368,14 @@
     }
     const sx = Math.min(1, maxW / ctx.measureText(code).width);
     ctx.save();
-    ctx.translate(W / 2, 175 * v);
+    ctx.translate(W / 2, 205 * v);
     ctx.scale(sx, 1);
     ctx.textAlign = "center";
     ctx.fillText(code, 0, 0);
     ctx.restore();
 
     // Date, right-aligned to the margin.
-    const rx = W - mx, y = 295 * v;
+    const rx = W - mx, y = 318 * v;
     const date = fmtDate($("mDate").value, $("mDateFmt").value);
     const dateSize = Math.min(fitFont(ctx, "Date - " + date, 700, 56 * u, maxW), 56 * u);
     ctx.textAlign = "right";
@@ -365,7 +386,7 @@
     ctx.fillText("Date - ", rx - dw, y);
 
     // Handwriting box: under half the label height.
-    const by = 360 * v, bh = 340 * v;
+    const by = 375 * v, bh = 325 * v;
     ctx.lineWidth = Math.max(2, Math.round(6 * u));
     ctx.strokeRect(mx, by, maxW, bh);
   };
