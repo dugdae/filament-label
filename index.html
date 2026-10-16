@@ -30,7 +30,7 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .full { grid-column: 1 / -1; }
   label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-  input, select { width: 100%; padding: 11px 12px; font-size: 16px; color: var(--text);
+  input, select, textarea { width: 100%; font-family: inherit; padding: 11px 12px; font-size: 16px; color: var(--text);
     background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
   input[type=checkbox] { width: auto; }
   button { padding: 12px 16px; font-size: 16px; font-weight: 600; border-radius: 10px;
@@ -91,13 +91,17 @@
     <h2>2 · Model (Serie Z)</h2>
     <div class="grid">
       <div class="full">
-        <label>Code (Zxx.Rxx.Pxxx.x)</label>
+        <label>Code (Zxx.Rxx.Pxxx.xx)</label>
         <div class="code">
           <span>Z</span><input id="mZ" inputmode="numeric" maxlength="2" placeholder="xx" autocomplete="off">
           <span>.R</span><input id="mR" inputmode="numeric" maxlength="2" placeholder="xx" autocomplete="off">
           <span>.P</span><input id="mP" inputmode="numeric" maxlength="3" placeholder="xxx" value="100" autocomplete="off" style="flex:1.4">
-          <span>.</span><input id="mV" inputmode="numeric" maxlength="1" placeholder="x" value="1" autocomplete="off" style="flex:.7">
+          <span>.</span><input id="mV" inputmode="numeric" maxlength="2" placeholder="xx" value="01" autocomplete="off" style="flex:.9">
         </div>
+      </div>
+      <div class="full">
+        <label for="mNote">Note (optional)</label>
+        <textarea id="mNote" rows="3" placeholder="Leave empty to write by hand" autocomplete="off"></textarea>
       </div>
       <div>
         <label for="mDate">Date</label>
@@ -113,7 +117,7 @@
         </select>
       </div>
     </div>
-    <p class="hint">The box on the label is left empty for writing by hand. Z01–Z12 print the stupa name (Thai) on the first line: <b id="mName">—</b></p>
+    <p class="hint">The box on the label is left empty for writing by hand unless you type a Note. Z01–Z12 print the stupa name (Thai) on the first line: <b id="mName">—</b></p>
     <div id="mRecentWrap" class="hidden" style="margin-top:14px">
       <label>Recent</label>
       <div id="mRecent" class="recent"></div>
@@ -207,7 +211,7 @@
   const $ = (id) => document.getElementById(id);
   const cv = $("cv");
   const FIELDS = ["fTitle", "fColor", "fCost", "fCurrency", "fDateFmt", "fEmptyBox", "fQty", "fDensity", "fW", "fH", "fDpi", "fDir",
-    "mZ", "mR", "mP", "mV", "mDateFmt"];
+    "mZ", "mR", "mP", "mV", "mNote", "mDateFmt"];
   const STORE_KEY = "filamentLabel.v1";
   let client = null;
   let busy = false;
@@ -220,7 +224,7 @@
     const s = load();
     for (const id of FIELDS) {
       if (s[id] === undefined) continue;
-      if ((id === "mP" || id === "mV") && s[id] === "") continue; // keep the P100.1 default
+      if ((id === "mP" || id === "mV") && s[id] === "") continue; // keep the P100.01 default
       if ($(id).type === "checkbox") $(id).checked = s[id]; else $(id).value = s[id];
     }
     $("fDate").value = $("mDate").value = today();
@@ -257,7 +261,7 @@
     return /^\d+$/.test(val) ? val.padStart(len, "0") : val.toUpperCase();
   };
   const modelCode = () =>
-    `Z${pad($("mZ").value, 2, "xx")}.R${pad($("mR").value, 2, "xx")}.P${pad($("mP").value, 3, "xxx")}.${pad($("mV").value, 1, "x")}`;
+    `Z${pad($("mZ").value, 2, "xx")}.R${pad($("mR").value, 2, "xx")}.P${pad($("mP").value, 3, "xxx")}.${pad($("mV").value, 2, "xx")}`;
   // Thai stupa name per Z number (printed as the first line of the Model label).
   const STUPA = {
     1: "พระธาตุศรีจอมทอง", 2: "พระธาตุลำปางหลวง", 3: "พระธาตุช่อแฮ", 4: "พระธาตุแช่แห้ง",
@@ -389,6 +393,36 @@
     const by = 375 * v, bh = 325 * v;
     ctx.lineWidth = Math.max(2, Math.round(6 * u));
     ctx.strokeRect(mx, by, maxW, bh);
+    const note = $("mNote").value.trim();
+    if (note) drawNote(ctx, note, mx, by, maxW, bh, u);
+  };
+
+  // Optional free-text note inside the box: explicit line breaks kept, long lines wrapped, font shrinks to fit.
+  const drawNote = (ctx, text, x, y, w, h, u) => {
+    const pad = 22 * u, maxW = w - pad * 2, maxH = h - pad * 2;
+    const f = (s) => `700 ${s}px ${`"Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, Roboto, sans-serif`}`;
+    const wrap = (s) => {
+      const out = [];
+      for (const para of text.split(/\r?\n/)) {
+        let line = "";
+        for (const word of para.split(/\s+/).filter(Boolean)) {
+          const t = line ? line + " " + word : word;
+          if (ctx.measureText(t).width <= maxW || !line) line = t; else { out.push(line); line = word; }
+        }
+        out.push(line);
+      }
+      return out;
+    };
+    let size = 70 * u, lines;
+    for (;; size -= 2 * u) {
+      ctx.font = f(size);
+      lines = wrap();
+      const fits = lines.length * size * 1.2 <= maxH && lines.every((l) => ctx.measureText(l).width <= maxW);
+      if (fits || size <= 18 * u) break;
+    }
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const lh = size * 1.2, top = y + h / 2 - (lines.length * lh) / 2 + lh / 2;
+    lines.forEach((l, i) => ctx.fillText(l, x + w / 2, top + i * lh));
   };
 
   const drawFilament = (ctx, W, H, u, v) => {
@@ -565,7 +599,7 @@
     const s = load(); s.tab = tab; save(s);
     render();
   }));
-  document.querySelectorAll("input, select").forEach((el) =>
+  document.querySelectorAll("input, select, textarea").forEach((el) =>
     el.addEventListener("input", () => { render(); persist(); }));
 
   restore();
